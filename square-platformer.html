@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Square platformer</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #90ee90;
+            margin: 0;
+            overflow: hidden;
+        }
+        canvas {
+            border: 1px solid black;
+            background: linear-gradient(to top, #87CEEB, #B0E0E6);
+            box-shadow: 10px 10px 20px rgba(0, 0, 0, 0.5);
+        }
+        .menu, .game-over, .countdown {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+        }
+        button {
+            font-size: 20px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        .mobile-controls {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+        .mobile-controls button {
+            padding: 15px;
+            font-size: 20px;
+            margin: 5px;
+        }
+
+        /* Show mobile controls only on mobile devices */
+        @media (max-width: 768px) {
+            .mobile-controls {
+                display: flex;
+            }
+            .desktop-controls {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="menu" id="menu">
+        <h1>Square platformer</h1>
+        <button onclick="startGame()">Play</button>
+    </div>
+    <div class="countdown" id="countdown" style="display: none;">
+        <h1>Game Starting in <span id="countdownText">3</span>...</h1>
+    </div>
+    <div class="game-over" id="gameOver" style="display: none;">
+        <h1>Game Over</h1>
+        <p>Score: <span id="finalScore">0</span></p>
+        <button onclick="startGame()">Restart</button>
+    </div>
+    <p>Score: <span id="score">0</span></p>
+    <canvas id="gameCanvas" width="1200" height="600"></canvas>
+
+    <!-- Mobile Controls -->
+    <div class="mobile-controls">
+        <button id="leftButton" onmousedown="moveLeft()" onmouseup="releaseLeft()">⬅️</button>
+        <button id="rightButton" onmousedown="moveRight()" onmouseup="releaseRight()">➡️</button>
+        <button id="jumpButton" onmousedown="jump()" onmouseup="releaseJump()">🦘</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreDisplay = document.getElementById("score");
+        const menu = document.getElementById("menu");
+        const gameOverScreen = document.getElementById("gameOver");
+        const finalScoreDisplay = document.getElementById("finalScore");
+        const countdownScreen = document.getElementById("countdown");
+        const countdownText = document.getElementById("countdownText");
+        const leftButton = document.getElementById("leftButton");
+        const rightButton = document.getElementById("rightButton");
+        const jumpButton = document.getElementById("jumpButton");
+
+        let monkey;
+        let platforms;
+        let clouds = [];
+        let gameRunning = false;
+        let keys = {};
+        let countdownTimer;
+
+        // Sound effects
+        const jumpSound = new Audio('jump-sound.mp3');
+        const gameOverSound = new Audio('game-over-sound.mp3');
+
+        window.addEventListener("keydown", (e) => keys[e.key] = true);
+        window.addEventListener("keyup", (e) => keys[e.key] = false);
+
+        // Mobile control variables
+        let leftButtonClicked = false;
+        let rightButtonClicked = false;
+        let jumpButtonClicked = false;
+
+        function startGame() {
+            menu.style.display = "none";
+            gameOverScreen.style.display = "none";
+            countdownScreen.style.display = "flex";
+            gameRunning = true;
+            resetGame();
+            startCountdown();
+        }
+
+        function startCountdown() {
+            let countdownValue = 3;
+            countdownText.innerText = countdownValue;
+            countdownTimer = setInterval(() => {
+                countdownValue--;
+                countdownText.innerText = countdownValue;
+                if (countdownValue <= 0) {
+                    clearInterval(countdownTimer);
+                    countdownScreen.style.display = "none";
+                    gameLoop();
+                }
+            }, 1000);
+        }
+
+        function resetGame() {
+            monkey = {
+                x: 400,
+                y: 300,
+                width: 40,
+                height: 40,
+                velocityY: 0,
+                velocityX: 0,
+                speed: 3,
+                gravity: 0.4,
+                jumpPower: -10,
+                onGround: false,
+                score: 0
+            };
+            platforms = [{ x: 350, y: 350, width: 100, height: 20, speed: 0, direction: 1 }];
+            clouds = [];
+            for (let i = 0; i < 5; i++) {
+                generatePlatform();
+            }
+            for (let i = 0; i < 3; i++) {
+                generateCloud();
+            }
+        }
+
+        function generatePlatform() {
+            let lastPlatform = platforms[platforms.length - 1];
+            let newY = lastPlatform.y - (90 + Math.random() * 40);
+            let newX = lastPlatform.x + (Math.random() * 400 - 200);
+            newX = Math.max(50, Math.min(canvas.width - 150, newX));
+            let speed = Math.random() < 0.3 ? 1 + Math.random() * 2 : 0;
+            platforms.push({ x: newX, y: newY, width: 100, height: 20, speed: speed, direction: 1 });
+        }
+
+        function generateCloud() {
+            let cloud = {
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height / 2,
+                width: 80 + Math.random() * 120,
+                height: 40 + Math.random() * 60,
+                speed: 0.2 + Math.random() * 1.5,
+                opacity: 0.2 + Math.random() * 0.3
+            };
+            clouds.push(cloud);
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw the sky
+            drawSky();
+
+            // Draw clouds
+            drawClouds();
+            
+            monkey.velocityY += monkey.gravity;
+            
+            // Handle movement based on both mobile and keyboard input
+            if (leftButtonClicked || keys["ArrowLeft"]) monkey.velocityX = -monkey.speed;
+            else if (rightButtonClicked || keys["ArrowRight"]) monkey.velocityX = monkey.speed;
+            else monkey.velocityX = 0;
+
+            if (jumpButtonClicked || keys["ArrowUp"]) {
+                if (monkey.onGround) {
+                    monkey.velocityY = monkey.jumpPower;
+                    monkey.onGround = false;
+                    jumpSound.play();
+                }
+            }
+
+            monkey.x += monkey.velocityX;
+            monkey.y += monkey.velocityY;
+            
+            let onPlatform = false;
+            platforms.forEach((platform) => {
+                platform.x += platform.speed * platform.direction;
+                if (platform.x <= 0 || platform.x + platform.width >= canvas.width) {
+                    platform.direction *= -1;
+                }
+                if (
+                    monkey.y + monkey.height >= platform.y &&
+                    monkey.y + monkey.height + monkey.velocityY >= platform.y &&
+                    monkey.y + monkey.height - monkey.velocityY <= platform.y + 5 &&
+                    monkey.x + monkey.width > platform.x &&
+                    monkey.x < platform.x + platform.width
+                ) {
+                    monkey.y = platform.y - monkey.height;
+                    monkey.velocityY = 0;
+                    onPlatform = true;
+                    monkey.x += platform.speed * platform.direction;
+                }
+            });
+            monkey.onGround = onPlatform;
+
+            if (monkey.y < canvas.height / 2) {
+                platforms.forEach(p => p.y += 2.5);
+                monkey.score++;
+                scoreDisplay.innerText = monkey.score;
+                if (platforms[0].y > canvas.height) {
+                    platforms.shift();
+                    generatePlatform();
+                }
+            }
+
+            if (monkey.y > canvas.height) {
+                endGame();
+                return;
+            }
+
+            monkey.x = Math.max(0, Math.min(canvas.width - monkey.width, monkey.x));
+            
+            platforms.forEach((platform) => {
+                if (platform.speed !== 0) {
+                    ctx.fillStyle = "#0000FF"; // Moving platforms - blue
+                } else {
+                    ctx.fillStyle = "#6AB04A"; // Static platforms - green
+                }
+
+                ctx.strokeStyle = "#0d3d15";
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                ctx.roundRect(platform.x, platform.y, platform.width, platform.height, 10);
+                ctx.fill();
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+                ctx.shadowBlur = 20;
+                ctx.shadowOffsetX = 8;
+                ctx.shadowOffsetY = 8;
+                ctx.strokeRect(platform.x, platform.y, platform.width, platform.height);
+                ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+                ctx.shadowBlur = 10;
+            });
+
+            ctx.fillStyle = "#D2691E";
+            ctx.strokeStyle = "#5a2e1a";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.roundRect(monkey.x, monkey.y, monkey.width, monkey.height, 10);
+            ctx.fill();
+            ctx.strokeRect(monkey.x, monkey.y, monkey.width, monkey.height);
+            ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+            ctx.shadowBlur = 10;
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function drawSky() {
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, "#87CEEB");  // Sky blue
+            gradient.addColorStop(1, "#B0E0E6");  // Light blue sky
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function drawClouds() {
+            clouds.forEach(cloud => {
+                ctx.fillStyle = `rgba(255, 255, 255, ${cloud.opacity})`;
+                ctx.beginPath();
+                ctx.ellipse(cloud.x, cloud.y, cloud.width, cloud.height, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Move clouds and make them glide off-screen
+                cloud.x += cloud.speed;
+                if (cloud.x > canvas.width + cloud.width) {
+                    cloud.x = -cloud.width;
+                }
+            });
+        }
+
+        function endGame() {
+            gameRunning = false;
+            gameOverScreen.style.display = "flex";
+            finalScoreDisplay.innerText = monkey.score;
+            gameOverSound.play();
+        }
+
+        // Mobile control functions
+        function moveLeft() {
+            leftButtonClicked = true;
+        }
+
+        function moveRight() {
+            rightButtonClicked = true;
+        }
+
+        function jump() {
+            jumpButtonClicked = true;
+        }
+
+        function releaseLeft() {
+            leftButtonClicked = false;
+        }
+
+        function releaseRight() {
+            rightButtonClicked = false;
+        }
+
+        function releaseJump() {
+            jumpButtonClicked = false;
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+
